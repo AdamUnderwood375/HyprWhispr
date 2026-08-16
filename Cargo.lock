@@ -1239,25 +1239,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-name = "rwhispr"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-channel",
- "cpal",
- "dirs",
- "futures-util",
- "gtk4",
- "gtk4-layer-shell",
- "rustls",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "toml",
-]
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1377,6 +1358,25 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "speakspic"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "cpal",
+ "dirs",
+ "futures-util",
+ "gtk4",
+ "gtk4-layer-shell",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "toml",
 ]
 
 [[package]]

@@ -137,7 +137,7 @@ impl Overlay {
 
         let window = Window::builder()
             .application(app)
-            .title("rwhispr overlay")
+            .title("Speak Spic")
             .resizable(false)
             .decorated(false)
             .focusable(false)

@@ -28,7 +28,7 @@ impl Default for Config {
 pub fn path() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("rwhispr/config.toml")
+        .join("speakspic/config.toml")
 }
 
 pub fn load() -> Result<Config> {
@@ -60,5 +60,5 @@ pub fn socket_path() -> PathBuf {
     // ponytail: XDG_RUNTIME_DIR is set on every session that can run a
     // compositor; /tmp only matters for odd headless runs.
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(runtime).join("rwhispr.sock")
+    PathBuf::from(runtime).join("speakspic.sock")
 }

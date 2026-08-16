@@ -1,4 +1,4 @@
-# rwhispr
+# Speak Spic
 
 Wispr Flow-style voice dictation for Linux, in Rust. Deepgram **streaming** STT,
 LinuxWhispr's GTK4 layer-shell pill overlay, clipboard+paste injection.
@@ -11,12 +11,12 @@ uploading a whole WAV or loading a local Whisper model after the fact.
 
 ```bash
 cargo build --release
-install -m755 target/release/rwhispr ~/.local/bin/rwhispr
+install -m755 target/release/speakspic ~/.local/bin/speakspic
 ```
 
 Needs: GTK4, gtk4-layer-shell, `wl-copy`, and `hyprctl` or `wtype`.
 
-## Config — `~/.config/rwhispr/config.toml`
+## Config — `~/.config/speakspic/config.toml`
 
 ```toml
 api_key = ""            # or $DEEPGRAM_API_KEY
@@ -30,23 +30,23 @@ Written with defaults on first run.
 
 ## Run
 
-Daemon (holds the overlay + control socket at `$XDG_RUNTIME_DIR/rwhispr.sock`):
+Daemon (holds the overlay + control socket at `$XDG_RUNTIME_DIR/speakspic.sock`):
 
 ```bash
-rwhispr
+speakspic
 ```
 
 Toggle recording (what the compositor keybind runs):
 
 ```bash
-rwhispr toggle
+speakspic toggle
 ```
 
 Hyprland:
 
 ```
-exec-once = ~/.local/bin/rwhispr
-bindl = SUPER SHIFT, SPACE, exec, ~/.local/bin/rwhispr toggle
+exec-once = ~/.local/bin/speakspic
+bindl = SUPER SHIFT, SPACE, exec, ~/.local/bin/speakspic toggle
 ```
 
 First toggle records, second stops, transcribes and pastes at the cursor.

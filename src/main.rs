@@ -36,7 +36,7 @@ fn main() -> Result<()> {
     });
 
     let app = gtk::Application::builder()
-        .application_id("dev.rwhispr")
+        .application_id("dev.speakspic")
         .flags(gtk::gio::ApplicationFlags::NON_UNIQUE)
         .build();
     app.connect_activate(move |app| {
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
 fn toggle() -> Result<()> {
     let path = config::socket_path();
     let mut sock = UnixStream::connect(&path)
-        .with_context(|| format!("rwhispr daemon not running ({})", path.display()))?;
+        .with_context(|| format!("speakspic daemon not running ({})", path.display()))?;
     sock.write_all(b"toggle")?;
     sock.shutdown(std::net::Shutdown::Write)?;
     let mut reply = String::new();
@@ -79,7 +79,7 @@ async fn serve(cfg: config::Config, ui: async_channel::Sender<State>) -> Result<
         // Only clear a socket nobody is serving; otherwise a second instance
         // would silently steal the first one's keybind.
         if UnixStream::connect(&path).is_ok() {
-            anyhow::bail!("another rwhispr is already listening on {}", path.display());
+            anyhow::bail!("another speakspic is already listening on {}", path.display());
         }
         std::fs::remove_file(&path)?;
     }
@@ -87,7 +87,7 @@ async fn serve(cfg: config::Config, ui: async_channel::Sender<State>) -> Result<
         std::fs::create_dir_all(d)?;
     }
     let listener = UnixListener::bind(&path)?;
-    eprintln!("rwhispr ready — listening on {}", path.display());
+    eprintln!("speakspic ready — listening on {}", path.display());
 
     let mut active: Option<Recording> = None;
     loop {

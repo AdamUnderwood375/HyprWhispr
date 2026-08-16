@@ -1,7 +1,7 @@
 # Speak Spic
 
 Wispr Flow-style voice dictation for Linux, in Rust. Deepgram **streaming** STT,
-LinuxWhispr's GTK4 layer-shell pill overlay, clipboard+paste injection.
+GTK4 layer-shell pill overlay, clipboard+paste injection.
 
 Why it's fast: audio goes to Deepgram over a websocket *while you speak*, so on
 key-release only the tail is outstanding (~300–500 ms measured), instead of

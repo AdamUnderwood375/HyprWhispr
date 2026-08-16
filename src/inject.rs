@@ -19,7 +19,7 @@ const TERMINALS: &[&str] = &[
     "com.mitchellh.ghostty",
 ];
 
-/// Clipboard + paste keystroke. Same pipeline as linux-whispr, minus the waits
+/// Clipboard + paste keystroke, with a single short settle instead of the
 /// that were there for Python's slower clipboard handoff.
 pub fn inject(text: &str, preserve_clipboard: bool) -> Result<()> {
     anyhow::ensure!(!text.is_empty(), "nothing to inject");

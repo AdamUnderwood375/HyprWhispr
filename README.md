@@ -1,4 +1,4 @@
-# Speak Spic
+# VoiceType
 
 Wispr Flow-style voice dictation for Linux, in Rust. Deepgram **streaming** STT,
 GTK4 layer-shell pill overlay, clipboard+paste injection.

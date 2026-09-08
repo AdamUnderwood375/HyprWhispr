@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
     let cfg = config::load()?;
     let cap = audio::start()?;
     println!("sample_rate={}", cap.sample_rate);
-    let session = deepgram::Session::connect(&cfg, cap.sample_rate).await?;
+    let session = deepgram::Session::connect(&cfg, cap.sample_rate, None).await?;
     let frames = cap.frames.clone();
     let pump = tokio::spawn(async move {
         let mut peak = 0i16;

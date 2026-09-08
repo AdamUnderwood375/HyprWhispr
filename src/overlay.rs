@@ -66,6 +66,8 @@ window { background: none; }
 .pill.error { border-color: rgba(255,158,74,0.32); }
 .title { color: rgba(240,240,248,0.94); font-size: 12px; font-weight: 600; }
 .timer { color: rgba(240,240,248,0.42); font-size: 11px; font-family: monospace; }
+.transcript { color: rgba(240,240,248,0.92); font-size: 12px; }
+.outer { background: none; }
 ";
 
 struct Anim {
@@ -83,6 +85,7 @@ pub struct Overlay {
     pill: gtk::Box,
     title: Label,
     timer: Label,
+    transcript: Label,
     state: Rc<Cell<State>>,
     since: Rc<Cell<Option<Instant>>>,
     anim: Rc<RefCell<Anim>>,
@@ -123,6 +126,15 @@ impl Overlay {
         title.add_css_class("title");
         let timer = Label::new(Some("0:00"));
         timer.add_css_class("timer");
+        let transcript = Label::new(None);
+        transcript.add_css_class("transcript");
+        transcript.set_wrap(true);
+        transcript.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+        transcript.set_max_width_chars(64);
+        transcript.set_justify(gtk::Justification::Left);
+        transcript.set_halign(gtk::Align::Start);
+        transcript.set_hexpand(true);
+        transcript.set_visible(false);
 
         let pill = gtk::Box::new(gtk::Orientation::Horizontal, 9);
         pill.add_css_class("pill");
@@ -134,6 +146,7 @@ impl Overlay {
         pill.append(&viz);
         pill.append(&title);
         pill.append(&timer);
+        pill.append(&transcript);
 
         let window = Window::builder()
             .application(app)
@@ -157,6 +170,7 @@ impl Overlay {
             pill,
             title,
             timer,
+            transcript,
             state,
             since,
             anim,
@@ -179,6 +193,8 @@ impl Overlay {
         if s == State::Hidden {
             self.anim.borrow_mut().target = 0.0;
             self.since.set(None);
+            self.transcript.set_visible(false);
+            self.transcript.set_text("");
         } else {
             self.title.set_text(s.label());
             self.timer.set_visible(s == State::Recording);
@@ -186,6 +202,7 @@ impl Overlay {
                 self.since.set(Some(Instant::now()));
                 self.timer.set_text("0:00");
                 self.anim.borrow_mut().levels = [0.0; BARS];
+                // keep transcript visible if we already have interim text
             }
             let mut a = self.anim.borrow_mut();
             a.target = 1.0;
@@ -194,6 +211,25 @@ impl Overlay {
             self.window.set_visible(true);
         }
         self.start_tick();
+    }
+
+    pub fn set_transcript(&self, text: &str) {
+        let t = text.trim();
+        if t.is_empty() {
+            self.transcript.set_visible(false);
+            self.transcript.set_text("");
+        } else {
+            // Show live WhisperFlow-style transcript that rewrites as you speak.
+            // Cap by chars (not bytes) to keep the pill from blowing out, but
+            // keep enough context to be useful and avoid mid-word cut.
+            let capped: String = if t.chars().count() > 320 {
+                t.chars().skip(t.chars().count() - 320).collect()
+            } else {
+                t.to_string()
+            };
+            self.transcript.set_text(&capped);
+            self.transcript.set_visible(true);
+        }
     }
 
     /// One frame-clock driven loop: eases the fade, scrolls the waveform,

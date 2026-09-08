@@ -15,15 +15,21 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn connect(cfg: &Config, sample_rate: u32) -> Result<Self> {
+    pub async fn connect(
+        cfg: &Config,
+        sample_rate: u32,
+        interim_tx: Option<async_channel::Sender<String>>,
+    ) -> Result<Self> {
+        let want_interim = interim_tx.is_some();
         let url = format!(
             "wss://api.deepgram.com/v1/listen?model={model}&language={lang}\
              &encoding=linear16&sample_rate={rate}&channels=1\
-             &smart_format=true&punctuate=true&interim_results=false&endpointing={ep}",
+             &smart_format=true&punctuate=true&interim_results={interim}&endpointing={ep}",
             model = cfg.model,
             lang = cfg.language,
             rate = sample_rate,
             ep = cfg.endpointing,
+            interim = want_interim,
         );
         let mut req = url.into_client_request()?;
         req.headers_mut().insert(
@@ -58,10 +64,33 @@ impl Session {
                     Some("Results") => {
                         let alt = &v["channel"]["alternatives"][0]["transcript"];
                         if let Some(s) = alt.as_str().map(str::trim).filter(|s| !s.is_empty()) {
-                            if !text.is_empty() {
-                                text.push(' ');
+                            let is_final = v["is_final"].as_bool().unwrap_or(false)
+                                || v["speech_final"].as_bool().unwrap_or(false);
+                            if want_interim {
+                                if is_final {
+                                    if !text.is_empty() {
+                                        text.push(' ');
+                                    }
+                                    text.push_str(s);
+                                    if let Some(tx) = interim_tx.as_ref() {
+                                        let _ = tx.try_send(text.clone());
+                                    }
+                                } else {
+                                    let live = if text.is_empty() {
+                                        s.to_string()
+                                    } else {
+                                        format!("{} {}", text, s)
+                                    };
+                                    if let Some(tx) = interim_tx.as_ref() {
+                                        let _ = tx.try_send(live);
+                                    }
+                                }
+                            } else {
+                                if !text.is_empty() {
+                                    text.push(' ');
+                                }
+                                text.push_str(s);
                             }
-                            text.push_str(s);
                         }
                     }
                     Some("Error") => anyhow::bail!("Deepgram error: {t}"),

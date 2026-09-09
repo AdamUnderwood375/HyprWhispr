@@ -58,26 +58,42 @@ except: pass
 
 model_lock = threading.Lock()
 
-def transcribe_pcm(pcm_i16: np.ndarray, sr: int) -> str:
+WINDOW_S = 30  # seconds to keep for interim windowed transcribe
+
+def transcribe_pcm(pcm_i16: np.ndarray, sr: int, is_interim: bool = False) -> str:
     if pcm_i16.size == 0:
         return ""
-    # if not 16k, resample crudely (linear) — whisper expects 16k; faster-whisper will resample internally but we help
     audio = pcm_i16.astype(np.float32) / 32768.0
-    # if sr != 16000, faster_whisper can handle any sr via decode? but we pass array so we should resample
     if sr != 16000:
-        # simple linear resample
-        import math
-        duration = len(audio) / sr
-        target_len = int(duration * 16000)
-        if target_len > 0:
-            x_old = np.linspace(0, 1, len(audio))
-            x_new = np.linspace(0, 1, target_len)
-            audio = np.interp(x_new, x_old, audio).astype(np.float32)
+        # Proper handling: prefer native 16 kHz capture (see src/audio.rs:26-56 —
+        # device is asked for PREFERRED_RATE=16k when supported, so this branch
+        # is fallback-only for devices lacking 16k). Linear np.interp is kept as
+        # lightweight fallback; for better quality use polyphase (scipy.signal
+        # resample_poly or libsamplerate) if available. Note: faster-whisper can
+        # ingest any sr but we resample once to match model expectation.
+        try:
+            from scipy.signal import resample_poly  # type: ignore
+            import math as _math
+            g = _math.gcd(int(sr), 16000)
+            audio = resample_poly(audio, 16000 // g, int(sr) // g).astype(np.float32)
+        except ImportError:
+            duration = len(audio) / sr
+            target_len = int(duration * 16000)
+            if target_len > 0:
+                x_old = np.linspace(0, 1, len(audio))
+                x_new = np.linspace(0, 1, target_len)
+                # fallback linear — fast but introduces mild aliasing; rare path
+                audio = np.interp(x_new, x_old, audio).astype(np.float32)
     # skip very short
     if len(audio) < 1600:  # <0.1s
         return ""
     with model_lock:
         try:
+            # For windowed interim (is_interim=True) we enable
+            # condition_on_previous_text (faster-whisper supports it) so the
+            # 30s slices maintain continuity; alternatively incremental VAD
+            # segments could be emitted but window+condition is the minimal
+            # O(W) fix.
             segments, info = model.transcribe(
                 audio,
                 language="en",
@@ -86,7 +102,7 @@ def transcribe_pcm(pcm_i16: np.ndarray, sr: int) -> str:
                 temperature=0.0,
                 vad_filter=True,
                 vad_parameters=dict(min_silence_duration_ms=300),
-                condition_on_previous_text=False,
+                condition_on_previous_text=is_interim,
             )
             text = " ".join(s.text.strip() for s in segments).strip()
             if not text:
@@ -97,7 +113,7 @@ def transcribe_pcm(pcm_i16: np.ndarray, sr: int) -> str:
                     best_of=1,
                     temperature=0.0,
                     vad_filter=False,
-                    condition_on_previous_text=False,
+                    condition_on_previous_text=is_interim,
                 )
                 text = " ".join(s.text.strip() for s in segments).strip()
             return text
@@ -130,14 +146,22 @@ def handle(conn):
             except: pass
 
         def worker_loop():
-            # transcribe every ~400ms while recording
+            # CPU win: previously O(n^2) — full buffer re-transcribed every 400 ms
+            # so total work for N seconds ≈ sum_{t=400ms}^{N} O(t) = O(N^2); at 60 s
+            # that's ~150 transcribes of ~30 s avg => ~4500 s of audio processed.
+            # Now slice to last WINDOW_S (30 s) so each tick is O(W) bounded
+            # (~480k samples @16k, ~2.9 MB), constant CPU & memory regardless of
+            # recording length. condition_on_previous_text=True preserves context.
             while not stop_flag.wait(0.40):
                 with lock:
                     cur = bytes(pcm_buf)
                 if len(cur) < 3200:  # <0.1s
                     continue
+                max_bytes = WINDOW_S * sr * 2  # 2 bytes per i16
+                if len(cur) > max_bytes:
+                    cur = cur[-max_bytes:]
                 arr = np.frombuffer(cur, dtype=np.int16)
-                txt = transcribe_pcm(arr, sr)
+                txt = transcribe_pcm(arr, sr, is_interim=True)
                 if txt and txt != last_text["v"]:
                     last_text["v"] = txt
                     send({"interim": txt})

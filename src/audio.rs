@@ -28,7 +28,8 @@ impl Capture {
 const PREFERRED_RATE: u32 = 16_000;
 
 pub fn start() -> Result<Capture> {
-    let (frames_tx, frames) = async_channel::unbounded::<Vec<i16>>();
+    // Bounded to cap memory: unbounded allowed O(N) growth if STT lags, now at most 64 chunks (~3.2 s @50ms each)
+    let (frames_tx, frames) = async_channel::bounded::<Vec<i16>>(64);
     let (stop, stop_rx) = async_channel::bounded::<()>(1);
     let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<u32>>();
 
@@ -120,5 +121,6 @@ fn emit(tx: &async_channel::Sender<Vec<i16>>, pcm: Vec<i16>) {
     let sum: f64 = pcm.iter().map(|&s| (s as f64).powi(2)).sum();
     let rms = (sum / pcm.len() as f64).sqrt() / 32768.0;
     LEVEL.store(((rms * 10.0).min(1.0) * 1000.0) as u32, Ordering::Relaxed);
+    // bounded(64) to cap memory: if STT lags, drop newest chunk (try_send fallback)
     let _ = tx.try_send(pcm);
 }

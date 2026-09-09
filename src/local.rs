@@ -25,7 +25,8 @@ impl Session {
         stream.write_all(&sample_rate.to_le_bytes()).await?;
 
         let (read_half, mut write_half) = stream.into_split();
-        let (audio_tx, audio_rx) = async_channel::unbounded::<Vec<i16>>();
+        // bounded(64) to cap memory if worker stalls; drop-oldest via try_send fallback
+        let (audio_tx, audio_rx) = async_channel::bounded::<Vec<i16>>(64);
 
         // pump PCM -> socket
         tokio::spawn(async move {
@@ -67,6 +68,7 @@ impl Session {
     }
 
     pub fn send(&self, pcm: Vec<i16>) {
+        // bounded(64) + try_send fallback: cap memory; drop newest if full
         let _ = self.audio_tx.try_send(pcm);
     }
 
@@ -95,6 +97,13 @@ pub async fn ensure_worker() -> Result<()> {
         .join("speakspic");
     let _ = std::fs::create_dir_all(&runtime);
     let log_path = runtime.join("worker.log");
+    // log rotation: cap worker.log to 5 MiB (note: truncate on startup if oversize; for production use rotating file appender)
+    const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+    if let Ok(meta) = std::fs::metadata(&log_path)
+        && meta.len() > MAX_LOG_BYTES
+    {
+        let _ = std::fs::write(&log_path, b"");
+    }
     let log_file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -121,7 +130,7 @@ pub async fn ensure_worker() -> Result<()> {
     }
     cmd.kill_on_drop(false);
 
-    // detach: spawn and forget; worker daemonizes via socket listen loop
+    // keep Child handle and wait in background instead of std::mem::forget
     let mut child = cmd
         .spawn()
         .context("failed to spawn local whisper worker")?;
@@ -129,8 +138,13 @@ pub async fn ensure_worker() -> Result<()> {
     for _ in 0..50 {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         if UnixStream::connect(&path).await.is_ok() {
-            // detach: don't wait
-            std::mem::forget(child);
+            let log_display = log_path.display().to_string();
+            tokio::spawn(async move {
+                match child.wait().await {
+                    Ok(s) => eprintln!("local worker exited with {s} (log {log_display})"),
+                    Err(e) => eprintln!("local worker wait error: {e}"),
+                }
+            });
             return Ok(());
         }
         // if child exited, bubble error

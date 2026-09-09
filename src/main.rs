@@ -112,6 +112,41 @@ async fn serve(
     let listener = UnixListener::bind(&path)?;
     eprintln!("speakspic ready — listening on {}", path.display());
 
+    // SIGTERM/SIGINT handler: unlink both daemon sockets on exit
+    {
+        let sock = path.clone();
+        let local_sock = crate::config::local_socket_path();
+        tokio::spawn(async move {
+            #[cfg(unix)]
+            {
+                let mut term =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+                let mut int =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).ok();
+                tokio::select! {
+                    _ = async {
+                        if let Some(s) = term.as_mut() { s.recv().await; }
+                        else { std::future::pending::<()>().await }
+                    } => {},
+                    _ = async {
+                        if let Some(s) = int.as_mut() { s.recv().await; }
+                        else { std::future::pending::<()>().await }
+                    } => {},
+                }
+                let _ = std::fs::remove_file(&sock);
+                let _ = std::fs::remove_file(&local_sock);
+                std::process::exit(0);
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = tokio::signal::ctrl_c().await;
+                let _ = std::fs::remove_file(&sock);
+                let _ = std::fs::remove_file(&local_sock);
+                std::process::exit(0);
+            }
+        });
+    }
+
     // Pre-warm local worker so first dictation has 0 cold-start latency
     if cfg.provider == "local" {
         tokio::spawn(async {

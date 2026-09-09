@@ -17,10 +17,10 @@ pub enum State {
 impl State {
     fn accent(self) -> (f64, f64, f64) {
         match self {
-            State::Recording => (1.00, 0.36, 0.42), // coral
+            State::Recording => (1.00, 0.36, 0.42),  // coral
             State::Processing => (0.45, 0.68, 1.00), // azure
-            State::Done => (0.31, 0.85, 0.60),      // mint
-            _ => (1.00, 0.62, 0.29),                // amber
+            State::Done => (0.31, 0.85, 0.60),       // mint
+            _ => (1.00, 0.62, 0.29),                 // amber
         }
     }
     fn label(self) -> &'static str {

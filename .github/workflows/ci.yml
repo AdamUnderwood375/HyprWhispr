@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libgtk4-layer-shell-dev pkg-config
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test

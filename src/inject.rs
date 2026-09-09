@@ -68,11 +68,7 @@ fn paste() -> Result<()> {
     if run(Command::new("hyprctl").args(["eval", &lua])) {
         return Ok(());
     }
-    if run(Command::new("hyprctl").args([
-        "dispatch",
-        "sendshortcut",
-        &format!("{mods}, v, "),
-    ])) {
+    if run(Command::new("hyprctl").args(["dispatch", "sendshortcut", &format!("{mods}, v, ")])) {
         return Ok(());
     }
     let key = if term { "V" } else { "v" };

@@ -2,6 +2,10 @@
 name = "speakspic"
 version = "0.1.0"
 edition = "2024"
+description = "Wispr Flow-style voice dictation for Linux — Deepgram streaming or local faster-whisper, GTK4 overlay"
+repository = "https://github.com/AdamUnderwood375/voicetype"
+license = "MIT OR Apache-2.0"
+keywords = ["voice", "dictation", "stt", "wayland", "hyprland"]
 
 [dependencies]
 anyhow = "1.0.104"

@@ -11,7 +11,10 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn connect(sample_rate: u32, interim_tx: async_channel::Sender<String>) -> Result<Self> {
+    pub async fn connect(
+        sample_rate: u32,
+        interim_tx: async_channel::Sender<String>,
+    ) -> Result<Self> {
         ensure_worker().await?;
         let path = crate::config::local_socket_path();
         let mut stream = UnixStream::connect(&path)
@@ -119,7 +122,9 @@ pub async fn ensure_worker() -> Result<()> {
     cmd.kill_on_drop(false);
 
     // detach: spawn and forget; worker daemonizes via socket listen loop
-    let mut child = cmd.spawn().context("failed to spawn local whisper worker")?;
+    let mut child = cmd
+        .spawn()
+        .context("failed to spawn local whisper worker")?;
     // give it a moment to bind (model load can take ~3s on cold start)
     for _ in 0..50 {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -130,7 +135,10 @@ pub async fn ensure_worker() -> Result<()> {
         }
         // if child exited, bubble error
         if let Ok(Some(status)) = child.try_wait() {
-            anyhow::bail!("local worker exited early with {status} (check {})", log_path.display());
+            anyhow::bail!(
+                "local worker exited early with {status} (check {})",
+                log_path.display()
+            );
         }
     }
     anyhow::bail!(
@@ -143,15 +151,32 @@ pub async fn ensure_worker() -> Result<()> {
 fn find_worker_py() -> Result<std::path::PathBuf> {
     let home = std::env::var("HOME").unwrap_or_default();
     let home_path = std::path::Path::new(&home);
-    let candidates = [
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    // exe-dir sibling — supports `install -m755 target/release/speakspic ~/.local/bin/speakspic`
+    // with `install -m755 local_worker.py ~/.local/bin/local_worker.py`
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        candidates.push(dir.join("local_worker.py"));
+    }
+    // ~/.local/bin sibling — covers the common install layout even when exe path is different
+    candidates.push(home_path.join(".local/bin/local_worker.py"));
+    candidates.extend([
         home_path.join("speakspic/local_worker.py"),
         home_path.join(".local/share/speakspic/local_worker.py"),
         std::path::PathBuf::from("local_worker.py"),
-    ];
-    for p in candidates {
+    ]);
+    for p in &candidates {
         if p.exists() {
-            return Ok(p);
+            return Ok(p.clone());
         }
     }
-    anyhow::bail!("local_worker.py not found")
+    anyhow::bail!(
+        "local_worker.py not found (searched: {})",
+        candidates
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }

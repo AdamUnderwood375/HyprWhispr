@@ -1,12 +1,17 @@
 // Self-check: mic produces non-silent audio and Deepgram returns a transcript.
 // Run: cargo run --example probe   (speak for ~3 s)
-#[path = "../src/audio.rs"] mod audio;
-#[path = "../src/config.rs"] mod config;
-#[path = "../src/deepgram.rs"] mod deepgram;
+#[path = "../src/audio.rs"]
+mod audio;
+#[path = "../src/config.rs"]
+mod config;
+#[path = "../src/deepgram.rs"]
+mod deepgram;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    rustls::crypto::ring::default_provider().install_default().ok();
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
     let cfg = config::load()?;
     let cap = audio::start()?;
     println!("sample_rate={}", cap.sample_rate);
@@ -16,7 +21,13 @@ async fn main() -> anyhow::Result<()> {
         let mut peak = 0i16;
         let mut n = 0usize;
         while let Ok(pcm) = frames.recv().await {
-            peak = peak.max(pcm.iter().copied().map(i16::saturating_abs).max().unwrap_or(0));
+            peak = peak.max(
+                pcm.iter()
+                    .copied()
+                    .map(i16::saturating_abs)
+                    .max()
+                    .unwrap_or(0),
+            );
             n += pcm.len();
             session.send(pcm);
         }

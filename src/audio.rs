@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Latest mic RMS, 0..1000. Global because only one capture runs at a time and

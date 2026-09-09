@@ -99,7 +99,10 @@ async fn serve(
         // Only clear a socket nobody is serving; otherwise a second instance
         // would silently steal the first one's keybind.
         if UnixStream::connect(&path).is_ok() {
-            anyhow::bail!("another speakspic is already listening on {}", path.display());
+            anyhow::bail!(
+                "another speakspic is already listening on {}",
+                path.display()
+            );
         }
         std::fs::remove_file(&path)?;
     }

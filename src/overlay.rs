@@ -25,7 +25,7 @@ impl State {
     }
     fn label(self) -> &'static str {
         match self {
-            State::Recording => "Listening",
+            State::Recording => "",
             State::Processing => "Transcribing",
             State::Done => "Pasted",
             State::Error => "Failed",
@@ -122,10 +122,12 @@ impl Overlay {
             viz.set_draw_func(move |_, cr, w, h| draw_viz(cr, w, h, s.get(), &a.borrow()));
         }
 
-        let title = Label::new(Some(State::Recording.label()));
+        let title = Label::new(None);
         title.add_css_class("title");
-        let timer = Label::new(Some("0:00"));
+        title.set_visible(false);
+        let timer = Label::new(None);
         timer.add_css_class("timer");
+        timer.set_visible(false);
         let transcript = Label::new(None);
         transcript.add_css_class("transcript");
         transcript.set_wrap(true);
@@ -195,12 +197,15 @@ impl Overlay {
             self.since.set(None);
             self.transcript.set_visible(false);
             self.transcript.set_text("");
+            self.title.set_visible(false);
+            self.title.set_text("");
         } else {
-            self.title.set_text(s.label());
-            self.timer.set_visible(s == State::Recording);
+            let label = s.label();
+            self.title.set_text(label);
+            self.title.set_visible(!label.is_empty());
+            self.timer.set_visible(false);
             if s == State::Recording {
                 self.since.set(Some(Instant::now()));
-                self.timer.set_text("0:00");
                 self.anim.borrow_mut().levels = [0.0; BARS];
                 // keep transcript visible if we already have interim text
             }
@@ -229,6 +234,10 @@ impl Overlay {
             };
             self.transcript.set_text(&capped);
             self.transcript.set_visible(true);
+            if self.state.get() == State::Recording {
+                self.title.set_visible(false);
+                self.timer.set_visible(false);
+            }
         }
     }
 

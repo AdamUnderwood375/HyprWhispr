@@ -1,4 +1,4 @@
-# Linux Whisper
+# HyprWhispr
 
 Wispr Flow-style voice dictation for Linux, in Rust. GTK4 layer-shell pill
 overlay, streaming local [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
@@ -13,7 +13,7 @@ land in the pill live.
 
 Neither the daemon nor the model sits in RAM while you're not dictating.
 
-- **No autostart.** `linux-whisper toggle` starts the daemon on the first
+- **No autostart.** `hyprwhispr toggle` starts the daemon on the first
   press (~80 ms) and connects once its socket is bound.
 - **No pre-warm.** The worker is spawned by the first dictation press, not at
   daemon startup.
@@ -40,9 +40,9 @@ const IDLE_TTL_SECS: u64 = 300;
 ```bash
 pip install faster-whisper numpy
 cargo build --release
-install -m755 target/release/linux-whisper ~/.local/bin/linux-whisper
+install -m755 target/release/hyprwhispr ~/.local/bin/hyprwhispr
 install -m755 local_worker.py ~/.local/bin/local_worker.py
-linux-whisper        # daemon — first run writes ~/.config/linux-whisper/config.toml
+hyprwhispr        # daemon — first run writes ~/.config/hyprwhispr/config.toml
 ```
 
 `provider = "local"` is the default when no `api_key` is set.
@@ -51,7 +51,7 @@ linux-whisper        # daemon — first run writes ~/.config/linux-whisper/confi
 
 ```bash
 export DEEPGRAM_API_KEY="your-key-here"
-# and set provider = "deepgram" in ~/.config/linux-whisper/config.toml
+# and set provider = "deepgram" in ~/.config/hyprwhispr/config.toml
 ```
 
 ## System dependencies
@@ -69,8 +69,8 @@ for mic capture.
 No autostart needed — the keybind starts the daemon on demand:
 
 ```bash
-linux-whisper toggle        # daemon spawns itself, overlay appears, starts recording
-linux-whisper               # ...or run the daemon in the foreground to watch its log
+hyprwhispr toggle        # daemon spawns itself, overlay appears, starts recording
+hyprwhispr               # ...or run the daemon in the foreground to watch its log
 ```
 
 First press records, second stops, transcribes and pastes at the cursor.
@@ -79,22 +79,22 @@ Hyprland (`hyprland.lua`) — no autostart line needed:
 
 ```lua
 hl.bind("CTRL + " .. mainMod .. " + V",
-        hl.dsp.exec_cmd("linux-whisper toggle"),
-        { locked = true, description = "Dictation (Linux Whisper)" })
+        hl.dsp.exec_cmd("hyprwhispr toggle"),
+        { locked = true, description = "Dictation (HyprWhispr)" })
 ```
 
 ### Shell-bar tile
 
-The daemon publishes its state to `/tmp/linux-whisper-state` — one of
+The daemon publishes its state to `/tmp/hyprwhispr-state` — one of
 `idle`, `loading`, `recording`, `transcribing`, `offline` — and removes it on
 exit, so a crashed session can never leave a stale file behind. The Quickshell
 tile (`settings/QuickTiles.qml`) polls that file and shells out to
-`linux-whisper toggle`.
+`hyprwhispr toggle`.
 
 Before the first press the file doesn't exist, so the tile reads `offline`
 rather than claiming a daemon is there.
 
-## Config — `~/.config/linux-whisper/config.toml`
+## Config — `~/.config/hyprwhispr/config.toml`
 
 ```toml
 api_key = ""            # or $DEEPGRAM_API_KEY (only for provider="deepgram")

@@ -162,7 +162,7 @@ pub async fn ensure_worker() -> Result<()> {
             let h = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
             std::path::PathBuf::from(h).join(".local/share")
         })
-        .join("linux-whisper");
+        .join("hyprwhispr");
     let _ = std::fs::create_dir_all(&runtime);
     let log_path = runtime.join("worker.log");
     // log rotation: cap worker.log to 5 MiB (note: truncate on startup if oversize; for production use rotating file appender)
@@ -183,7 +183,7 @@ pub async fn ensure_worker() -> Result<()> {
     cmd.arg(&worker_py)
         .arg(format!("--model={}", model))
         .arg(format!("--sock={}", path.display()))
-        .env("LINUX_WHISPER_MODEL", &model)
+        .env("HYPRWHISPR_MODEL", &model)
         .stdin(std::process::Stdio::null());
 
     if let Some(f) = log_file {
@@ -243,7 +243,7 @@ fn find_worker_py() -> Result<std::path::PathBuf> {
     let home = std::env::var("HOME").unwrap_or_default();
     let home_path = std::path::Path::new(&home);
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-    // exe-dir sibling — supports `install -m755 target/release/linux-whisper ~/.local/bin/linux-whisper`
+    // exe-dir sibling — supports `install -m755 target/release/hyprwhispr ~/.local/bin/hyprwhispr`
     // with `install -m755 local_worker.py ~/.local/bin/local_worker.py`
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
@@ -253,8 +253,8 @@ fn find_worker_py() -> Result<std::path::PathBuf> {
     // ~/.local/bin sibling — covers the common install layout even when exe path is different
     candidates.push(home_path.join(".local/bin/local_worker.py"));
     candidates.extend([
-        home_path.join("linux-whisper/local_worker.py"),
-        home_path.join(".local/share/linux-whisper/local_worker.py"),
+        home_path.join("hyprwhispr/local_worker.py"),
+        home_path.join(".local/share/hyprwhispr/local_worker.py"),
         std::path::PathBuf::from("local_worker.py"),
     ]);
     for p in &candidates {

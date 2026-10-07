@@ -156,7 +156,7 @@ impl Overlay {
 
         let window = Window::builder()
             .application(app)
-            .title("Linux Whisper")
+            .title("HyprWhispr")
             .resizable(false)
             .decorated(false)
             .focusable(false)

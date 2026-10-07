@@ -105,11 +105,11 @@ fn toggle() -> Result<()> {
 /// short-lived client. Dropping the `Child` does not kill it, so it survives
 /// long enough to bind its socket.
 fn spawn_daemon() -> Result<()> {
-    let exe = std::env::current_exe().context("cannot locate the linux-whisper binary")?;
+    let exe = std::env::current_exe().context("cannot locate the hyprwhispr binary")?;
     let log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/linux-whisper.log")
+        .open("/tmp/hyprwhispr.log")
         .ok();
     let mut cmd = std::process::Command::new(exe);
     cmd.stdin(std::process::Stdio::null());
@@ -127,7 +127,7 @@ fn spawn_daemon() -> Result<()> {
             cmd.stderr(std::process::Stdio::null());
         }
     }
-    cmd.spawn().context("failed to start Linux Whisper")?;
+    cmd.spawn().context("failed to start HyprWhispr")?;
     Ok(())
 }
 
@@ -141,7 +141,7 @@ fn connect_when_ready(path: &std::path::Path) -> Result<UnixStream> {
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    anyhow::bail!("Linux Whisper did not come up ({})", path.display())
+    anyhow::bail!("HyprWhispr did not come up ({})", path.display())
 }
 
 async fn serve(
@@ -155,7 +155,7 @@ async fn serve(
         // would silently steal the first one's keybind.
         if UnixStream::connect(&path).is_ok() {
             anyhow::bail!(
-                "another Linux Whisper is already listening on {}",
+                "another HyprWhispr is already listening on {}",
                 path.display()
             );
         }
@@ -165,7 +165,7 @@ async fn serve(
         std::fs::create_dir_all(d)?;
     }
     let listener = UnixListener::bind(&path)?;
-    eprintln!("Linux Whisper ready — listening on {}", path.display());
+    eprintln!("HyprWhispr ready — listening on {}", path.display());
     config::write_state("idle");
 
     // SIGTERM/SIGINT handler: unlink both daemon sockets on exit

@@ -767,6 +767,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyprwhispr"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "cpal",
+ "dirs",
+ "futures-util",
+ "gtk4",
+ "gtk4-layer-shell",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "toml",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -870,25 +889,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d0a00925a9f930d679b6789b721e3a7f9ed110f41b86d2497caa780c3a070a"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "linux-whisper"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-channel",
- "cpal",
- "dirs",
- "futures-util",
- "gtk4",
- "gtk4-layer-shell",
- "rustls",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "toml",
 ]
 
 [[package]]

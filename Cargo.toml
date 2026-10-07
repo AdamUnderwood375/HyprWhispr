@@ -1,9 +1,9 @@
 [package]
-name = "linux-whisper"
+name = "hyprwhispr"
 version = "0.1.0"
 edition = "2024"
-description = "Linux Whisper — Wispr Flow-style voice dictation for Linux. Local faster-whisper by default (no API key), Deepgram streaming optional. GTK4 overlay."
-repository = "https://github.com/AdamUnderwood375/voicetype"
+description = "HyprWhispr — Wispr Flow-style voice dictation for Linux. Local faster-whisper by default (no API key), Deepgram streaming optional. GTK4 overlay."
+repository = "https://github.com/AdamUnderwood375/HyprWhispr"
 license = "MIT OR Apache-2.0"
 keywords = ["voice", "dictation", "stt", "wayland", "hyprland"]
 

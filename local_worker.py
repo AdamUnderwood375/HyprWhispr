@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local Whisper worker for Linux Whisper — live streaming dictation.
+Local Whisper worker for HyprWhispr — live streaming dictation.
 
 Protocol (Unix socket, one session per connection):
   Client connects, sends 4-byte LE u32 sample_rate, then streams raw PCM16LE mono
@@ -12,9 +12,9 @@ Protocol (Unix socket, one session per connection):
 """
 import os, sys, socket, struct, json, time, threading, signal, pathlib
 
-DEFAULT_SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "linux-whisper-local.sock")
-SOCK_PATH = os.environ.get("LINUX_WHISPER_LOCAL_SOCK", DEFAULT_SOCK)
-MODEL_NAME = os.environ.get("LINUX_WHISPER_MODEL", "tiny.en")
+DEFAULT_SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hyprwhispr-local.sock")
+SOCK_PATH = os.environ.get("HYPRWHISPR_LOCAL_SOCK", DEFAULT_SOCK)
+MODEL_NAME = os.environ.get("HYPRWHISPR_MODEL", "tiny.en")
 for a in sys.argv[1:]:
     if a.startswith("--sock="):
         SOCK_PATH = a.split("=", 1)[1]

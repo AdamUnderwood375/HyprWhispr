@@ -34,7 +34,7 @@ impl Default for Config {
 pub fn path() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("speakspic/config.toml")
+        .join("linux-whisper/config.toml")
 }
 
 pub fn load() -> Result<Config> {
@@ -84,13 +84,24 @@ pub fn load_for_worker() -> Result<Config> {
 }
 
 pub fn socket_path() -> PathBuf {
-    // ponytail: XDG_RUNTIME_DIR is set on every session that can run a
+    // XDG_RUNTIME_DIR is set on every session that can run a
     // compositor; /tmp only matters for odd headless runs.
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(runtime).join("speakspic.sock")
+    PathBuf::from(runtime).join("linux-whisper.sock")
 }
 
 pub fn local_socket_path() -> PathBuf {
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(runtime).join("speakspic-local.sock")
+    PathBuf::from(runtime).join("linux-whisper-local.sock")
+}
+
+/// State file the shell bar reads to show "Listening… / Working…".
+/// /tmp on purpose: the daemon writes it on every state change and removes it
+/// on exit, so a stale file from a crashed session can never survive a reboot.
+pub fn state_path() -> PathBuf {
+    PathBuf::from("/tmp/linux-whisper-state")
+}
+
+pub fn write_state(s: &str) {
+    let _ = std::fs::write(state_path(), s);
 }

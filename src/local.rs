@@ -1,6 +1,67 @@
 use anyhow::{Context, Result};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
+
+/// Release the model this long after the last dictation. Same rule as the pi
+/// `dictate` extension (`IDLE_TTL_MS`): spawn on demand, hold for a few minutes
+/// so re-toggles are instant, then exit so an idle machine pays zero RAM.
+const IDLE_TTL_SECS: u64 = 300;
+/// Watchdog poll interval. Keep well under the TTL so the kill lands promptly.
+const TTL_TICK_SECS: u64 = 15;
+
+static WORKER_PID: AtomicU32 = AtomicU32::new(0);
+static LAST_USE_MS: AtomicU64 = AtomicU64::new(0);
+static WATCHDOG_STARTED: AtomicU32 = AtomicU32::new(0);
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Mark the worker as just-used, restarting the idle countdown.
+fn touch() {
+    LAST_USE_MS.store(now_ms(), Ordering::Relaxed);
+}
+
+/// Kill the worker and drop its socket. Idempotent.
+pub fn release_worker(why: &str) {
+    let pid = WORKER_PID.swap(0, Ordering::SeqCst);
+    if pid != 0 {
+        eprintln!("local worker: {why} — releasing whisper model (pid {pid})");
+        // SIGTERM via kill(1): local_worker.py installs a SIGTERM handler that
+        // exits cleanly. Avoids pulling a libc/nix dependency for one signal.
+        let _ = std::process::Command::new("kill")
+            .arg("-TERM")
+            .arg(pid.to_string())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    let _ = std::fs::remove_file(crate::config::local_socket_path());
+}
+
+/// Background loop that enforces IDLE_TTL_SECS. Started once, lives for the
+/// daemon's lifetime, costs nothing when no worker is running.
+fn spawn_watchdog() {
+    if WATCHDOG_STARTED.swap(1, Ordering::SeqCst) == 1 {
+        return;
+    }
+    tokio::spawn(async {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(TTL_TICK_SECS)).await;
+            if WORKER_PID.load(Ordering::Relaxed) == 0 {
+                continue;
+            }
+            let last = LAST_USE_MS.load(Ordering::Relaxed);
+            if last != 0 && now_ms().saturating_sub(last) > IDLE_TTL_SECS * 1000 {
+                release_worker("idle TTL expired");
+            }
+        }
+    });
+}
 
 /// Live local transcription session: streams PCM to the Python worker and
 /// yields interim transcripts as they arrive. Mirrors deepgram::Session API
@@ -73,16 +134,23 @@ impl Session {
     }
 
     pub async fn finish(self) -> Result<String> {
+        touch();
         self.audio_tx.close();
         self.done.await?
     }
 }
 
 pub async fn ensure_worker() -> Result<()> {
+    spawn_watchdog();
+    touch();
     let path = crate::config::local_socket_path();
     if tokio::net::UnixStream::connect(&path).await.is_ok() {
         return Ok(());
     }
+    // The watchdog may have just killed the worker without unlinking the socket;
+    // do it here so the liveness probe above can't see a dead socket.
+    WORKER_PID.store(0, Ordering::Relaxed);
+    let _ = std::fs::remove_file(&path);
     // spawn detached worker; it will listen on the same socket
     let worker_py = find_worker_py()?;
     let cfg = crate::config::load_for_worker().unwrap_or_default();
@@ -94,7 +162,7 @@ pub async fn ensure_worker() -> Result<()> {
             let h = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
             std::path::PathBuf::from(h).join(".local/share")
         })
-        .join("speakspic");
+        .join("linux-whisper");
     let _ = std::fs::create_dir_all(&runtime);
     let log_path = runtime.join("worker.log");
     // log rotation: cap worker.log to 5 MiB (note: truncate on startup if oversize; for production use rotating file appender)
@@ -115,7 +183,7 @@ pub async fn ensure_worker() -> Result<()> {
     cmd.arg(&worker_py)
         .arg(format!("--model={}", model))
         .arg(format!("--sock={}", path.display()))
-        .env("SPEAKSPIC_MODEL", &model)
+        .env("LINUX_WHISPER_MODEL", &model)
         .stdin(std::process::Stdio::null());
 
     if let Some(f) = log_file {
@@ -131,9 +199,13 @@ pub async fn ensure_worker() -> Result<()> {
     cmd.kill_on_drop(false);
 
     // keep Child handle and wait in background instead of std::mem::forget
+    let path_keep = path.clone();
     let mut child = cmd
         .spawn()
         .context("failed to spawn local whisper worker")?;
+    if let Some(pid) = child.id() {
+        WORKER_PID.store(pid, Ordering::SeqCst);
+    }
     // give it a moment to bind (model load can take ~3s on cold start)
     for _ in 0..50 {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -141,7 +213,11 @@ pub async fn ensure_worker() -> Result<()> {
             let log_display = log_path.display().to_string();
             tokio::spawn(async move {
                 match child.wait().await {
-                    Ok(s) => eprintln!("local worker exited with {s} (log {log_display})"),
+                    Ok(s) => {
+                        WORKER_PID.store(0, Ordering::SeqCst);
+                        let _ = std::fs::remove_file(&path_keep);
+                        eprintln!("local worker exited with {s} (log {log_display})")
+                    }
                     Err(e) => eprintln!("local worker wait error: {e}"),
                 }
             });
@@ -149,6 +225,7 @@ pub async fn ensure_worker() -> Result<()> {
         }
         // if child exited, bubble error
         if let Ok(Some(status)) = child.try_wait() {
+            WORKER_PID.store(0, Ordering::Relaxed);
             anyhow::bail!(
                 "local worker exited early with {status} (check {})",
                 log_path.display()
@@ -166,7 +243,7 @@ fn find_worker_py() -> Result<std::path::PathBuf> {
     let home = std::env::var("HOME").unwrap_or_default();
     let home_path = std::path::Path::new(&home);
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-    // exe-dir sibling — supports `install -m755 target/release/speakspic ~/.local/bin/speakspic`
+    // exe-dir sibling — supports `install -m755 target/release/linux-whisper ~/.local/bin/linux-whisper`
     // with `install -m755 local_worker.py ~/.local/bin/local_worker.py`
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
@@ -176,8 +253,8 @@ fn find_worker_py() -> Result<std::path::PathBuf> {
     // ~/.local/bin sibling — covers the common install layout even when exe path is different
     candidates.push(home_path.join(".local/bin/local_worker.py"));
     candidates.extend([
-        home_path.join("speakspic/local_worker.py"),
-        home_path.join(".local/share/speakspic/local_worker.py"),
+        home_path.join("linux-whisper/local_worker.py"),
+        home_path.join(".local/share/linux-whisper/local_worker.py"),
         std::path::PathBuf::from("local_worker.py"),
     ]);
     for p in &candidates {

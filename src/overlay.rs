@@ -8,6 +8,7 @@ use std::time::Instant;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum State {
     Hidden,
+    Loading,
     Recording,
     Processing,
     Done,
@@ -25,6 +26,7 @@ impl State {
     }
     fn label(self) -> &'static str {
         match self {
+            State::Loading => "Loading model",
             State::Recording => "",
             State::Processing => "Transcribing",
             State::Done => "Pasted",
@@ -34,6 +36,7 @@ impl State {
     }
     fn css(self) -> &'static str {
         match self {
+            State::Loading => "loading",
             State::Recording => "recording",
             State::Processing => "processing",
             State::Done => "done",
@@ -61,6 +64,7 @@ window { background: none; }
   padding: 7px 16px 7px 14px;
 }
 .pill.recording { border-color: rgba(255,92,107,0.30); }
+.pill.loading { border-color: rgba(255,158,74,0.26); }
 .pill.processing { border-color: rgba(115,173,255,0.30); }
 .pill.done { border-color: rgba(79,217,153,0.32); }
 .pill.error { border-color: rgba(255,158,74,0.32); }
@@ -152,7 +156,7 @@ impl Overlay {
 
         let window = Window::builder()
             .application(app)
-            .title("Speak Spic")
+            .title("Linux Whisper")
             .resizable(false)
             .decorated(false)
             .focusable(false)
@@ -384,6 +388,20 @@ fn draw_viz(cr: &cairo::Context, w: i32, h: i32, state: State, a: &Anim) {
             let _ = cr.stroke();
             cr.arc(cx, cy + 5.0, 1.3, 0.0, std::f64::consts::TAU);
             let _ = cr.fill();
+        }
+        State::Loading => {
+            // Indeterminate spinner: shown while the whisper model loads, which
+            // only happens on the first dictation after the idle TTL.
+            let cx = w / 2.0;
+            let spin = a.phase * 3.6;
+            cr.set_line_width(1.8);
+            cr.set_source_rgba(r, g, b, 0.16);
+            cr.arc(cx, cy, 6.5, 0.0, std::f64::consts::TAU);
+            let _ = cr.stroke();
+            cr.set_line_width(2.0);
+            cr.set_source_rgba(r, g, b, 0.95);
+            cr.arc(cx, cy, 6.5, spin, spin + 2.0);
+            let _ = cr.stroke();
         }
         State::Hidden => {}
     }

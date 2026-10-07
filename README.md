@@ -1,74 +1,100 @@
-# Hyprland VoiceType
+# Linux Whisper
 
-Wispr Flow-style voice dictation for Linux, in Rust. Deepgram **streaming** STT,
-GTK4 layer-shell pill overlay, clipboard+paste injection. Defaults to local
-[faster-whisper](https://github.com/SYSTRAN/faster-whisper) so no API key is
-needed.
+Wispr Flow-style voice dictation for Linux, in Rust. GTK4 layer-shell pill
+overlay, streaming local [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+by default so no API key is needed, Deepgram optional.
 
-Why it's fast: audio goes to Deepgram over a websocket *while you speak*, so on
-key-release only the tail is outstanding (~300–500 ms measured), instead of
-uploading a whole WAV or loading a local Whisper model after the fact. Local
-mode streams to a Python worker over a Unix socket with interim transcripts.
+Why it's fast: audio is streamed to the worker over a Unix socket *while you
+speak*, so on key-release only the tail is outstanding (~300–500 ms), instead
+of uploading a whole WAV or loading a model after the fact. Interim transcripts
+land in the pill live.
+
+## RAM: nothing is resident between dictations
+
+Neither the daemon nor the model sits in RAM while you're not dictating.
+
+- **No autostart.** `linux-whisper toggle` starts the daemon on the first
+  press (~80 ms) and connects once its socket is bound.
+- **No pre-warm.** The worker is spawned by the first dictation press, not at
+  daemon startup.
+- **A watchdog releases the model** (`SIGTERM` + socket cleanup) after **300 s
+  with no dictation sessions** — the same idle-TTL rule as the pi `dictate`
+  extension. The daemon also takes its worker down when it is shut down.
+- Re-toggles inside that window are instant; after it, the next press pays a
+  ~2–3 s model load, which the overlay shows as a **Loading model** pill with a
+  spinner rather than pretending it is already listening. The mic is open the
+  whole time, so nothing you say in those seconds is lost.
+
+Idle cost is **zero processes**.
+
+Tune it in `src/local.rs`:
+
+```rust
+const IDLE_TTL_SECS: u64 = 300;
+```
 
 ## Quick start
 
-### A. Local — no API key (default)
+### Local — no API key (default)
 
 ```bash
 pip install faster-whisper numpy
-# model is downloaded on first run (~40–150 MB depending on local_model);
-# or pre-fetch: python -c "from faster_whisper import WhisperModel; WhisperModel('tiny.en')"
 cargo build --release
-install -m755 target/release/speakspic ~/.local/bin/speakspic
+install -m755 target/release/linux-whisper ~/.local/bin/linux-whisper
 install -m755 local_worker.py ~/.local/bin/local_worker.py
-# ensure ~/.local/bin is on PATH:
-export PATH="$HOME/.local/bin:$PATH"   # add to ~/.bashrc / ~/.zshrc
-speakspic          # daemon — first run writes ~/.config/speakspic/config.toml with provider="local"
+linux-whisper        # daemon — first run writes ~/.config/linux-whisper/config.toml
 ```
 
-`provider = "local"` is the default when no `api_key` is set. See **Config** below for `provider`/`local_model`.
+`provider = "local"` is the default when no `api_key` is set.
 
-### B. Deepgram — cloud streaming (lowest tail latency)
+### Deepgram — cloud streaming (optional)
 
 ```bash
-export DEEPGRAM_API_KEY="your-key-here"   # or set api_key in config.toml
-# set provider to deepgram:
-# ~/.config/speakspic/config.toml -> provider = "deepgram"
-cargo build --release
-install -m755 target/release/speakspic ~/.local/bin/speakspic
-speakspic
+export DEEPGRAM_API_KEY="your-key-here"
+# and set provider = "deepgram" in ~/.config/linux-whisper/config.toml
 ```
 
-On first run with `provider = "deepgram"` you must have `api_key` or
-`$DEEPGRAM_API_KEY` set or the daemon will refuse to start.
-
-## Build & install
-
-```bash
-cargo build --release
-install -m755 target/release/speakspic ~/.local/bin/speakspic
-install -m755 local_worker.py ~/.local/bin/local_worker.py
-```
-
-### System dependencies
+## System dependencies
 
 ```bash
 # Arch
 sudo pacman -S gtk4 gtk4-layer-shell wl-clipboard pkg-config
-# Debian/Ubuntu
-sudo apt install libgtk-4-dev libgtk4-layer-shell-dev wl-clipboard pkg-config
 ```
 
-Also needs `wl-copy`, and `hyprctl` or `wtype` for paste injection.
+Needs `wl-copy`, and `hyprctl` or `wtype` for paste injection, plus `pw-record`
+for mic capture.
 
-> **Note:** building `gtk4`/`gtk4-layer-shell` crates requires `pkg-config` and
-> the GTK4 development headers (`libgtk-4-dev` / `gtk4`). If `cargo build`
-> fails with `pkg-config not found` or `gtk4 not found`, install the packages
-> above.
+## Run
 
-Needs: GTK4, gtk4-layer-shell, `wl-copy`, and `hyprctl` or `wtype`.
+No autostart needed — the keybind starts the daemon on demand:
 
-## Config — `~/.config/speakspic/config.toml`
+```bash
+linux-whisper toggle        # daemon spawns itself, overlay appears, starts recording
+linux-whisper               # ...or run the daemon in the foreground to watch its log
+```
+
+First press records, second stops, transcribes and pastes at the cursor.
+
+Hyprland (`hyprland.lua`) — no autostart line needed:
+
+```lua
+hl.bind("CTRL + " .. mainMod .. " + V",
+        hl.dsp.exec_cmd("linux-whisper toggle"),
+        { locked = true, description = "Dictation (Linux Whisper)" })
+```
+
+### Shell-bar tile
+
+The daemon publishes its state to `/tmp/linux-whisper-state` — one of
+`idle`, `loading`, `recording`, `transcribing`, `offline` — and removes it on
+exit, so a crashed session can never leave a stale file behind. The Quickshell
+tile (`settings/QuickTiles.qml`) polls that file and shells out to
+`linux-whisper toggle`.
+
+Before the first press the file doesn't exist, so the tile reads `offline`
+rather than claiming a daemon is there.
+
+## Config — `~/.config/linux-whisper/config.toml`
 
 ```toml
 api_key = ""            # or $DEEPGRAM_API_KEY (only for provider="deepgram")
@@ -88,43 +114,13 @@ local_model = "tiny.en" # faster-whisper model: "tiny.en", "base.en", "small.en"
 | `endpointing` | `300` | ms of silence before Deepgram finalizes a segment. |
 | `preserve_clipboard` | `false` | Restore clipboard after paste. |
 | `provider` | `"local"` | STT backend: `"local"` (faster-whisper, no API key) or `"deepgram"` (cloud streaming). |
-| `local_model` | `"tiny.en"` | faster-whisper model for local provider. Larger models are more accurate but slower. |
-
-Written with defaults on first run.
-
-## Run
-
-Daemon (holds the overlay + control socket at `$XDG_RUNTIME_DIR/speakspic.sock`):
-
-```bash
-speakspic
-```
-
-Toggle recording (what the compositor keybind runs):
-
-```bash
-speakspic toggle
-```
-
-Hyprland:
-
-```
-exec-once = ~/.local/bin/speakspic
-bindl = SUPER SHIFT, SPACE, exec, ~/.local/bin/speakspic toggle
-```
-
-First toggle records, second stops, transcribes and pastes at the cursor.
+| `local_model` | `"tiny.en"` | faster-whisper model for local provider. `tiny.en` is ~240 MB RSS int8; larger models are more accurate and heavier. |
 
 ## Self-check
 
 ```bash
-cargo run --example probe   # speak for 4 s — requires DEEPGRAM_API_KEY (Deepgram only)
+cargo run --example probe   # requires DEEPGRAM_API_KEY — Deepgram path only
 ```
-
-Asserts mic capture is non-empty and prints sample rate, peak level, tail
-latency, and the transcript. This example uses the Deepgram backend directly
-and requires `DEEPGRAM_API_KEY` to be set (it does not test the local
-faster-whisper path).
 
 ## License
 
